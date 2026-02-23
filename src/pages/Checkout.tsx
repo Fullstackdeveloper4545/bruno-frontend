@@ -7,7 +7,7 @@ import { useCart, type CartItem } from '@/contexts/CartContext';
 import { useUserAuth } from '@/contexts/UserAuthContext';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-import { postJson } from '@/lib/api';
+import { API_BASE_URL, postJson } from '@/lib/api';
 
 type PaymentMethod = 'mbway' | 'mbref' | 'klarna';
 
@@ -28,7 +28,6 @@ type CheckoutLocationState = {
   buyNowCoupon?: { code: string; discount: number };
 };
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000';
 const bypassPaymentCheckout =
   String(import.meta.env.VITE_BYPASS_PAYMENT_CHECKOUT ?? 'true').toLowerCase() === 'true';
 
@@ -195,7 +194,7 @@ const CheckoutPage = () => {
             provider: paymentProvider,
             method: paymentMethodApi,
             customer: { phone: personal.phone, email: checkoutEmail },
-            callback_url: `${apiBase}/api/payments/webhooks/${paymentProvider}`,
+            callback_url: `${API_BASE_URL}/api/payments/webhooks/${paymentProvider}`,
             return_url: `${window.location.origin}/order-confirmation`,
           });
 

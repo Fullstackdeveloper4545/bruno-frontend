@@ -7,6 +7,7 @@ export const adminApi = {
   deleteProduct: (id: string) => deleteJson(`/api/products/${id}`),
   createVariant: (productId: string, payload: unknown) => postJson(`/api/products/${productId}/variants`, payload),
   updateVariant: (variantId: string, payload: unknown) => putJson(`/api/catalog/variants/${variantId}`, payload),
+  getInventory: (productId: string) => getJson(`/api/products/${productId}/inventory`),
   updateInventory: (variantId: string, storeId: string, stock_quantity: number) =>
     putJson(`/api/catalog/variants/${variantId}/inventory/${storeId}`, { stock_quantity }),
 
@@ -38,6 +39,13 @@ export const adminApi = {
   deleteCoupon: (id: number) => deleteJson(`/api/discounts/coupons/${id}`),
 
   listOrders: () => getJson('/api/orders'),
+  getDashboardSummary: (params?: { threshold?: number; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.threshold != null) search.set('threshold', String(params.threshold));
+    if (params?.limit != null) search.set('limit', String(params.limit));
+    const query = search.toString();
+    return getJson(`/api/orders/dashboard/summary${query ? `?${query}` : ''}`);
+  },
   getOrder: (id: number) => getJson(`/api/orders/${id}`),
   updateOrderStatus: (id: number, status: string) => putJson(`/api/orders/${id}/status`, { status }),
   createOrder: (payload: unknown) => postJson('/api/orders', payload),
@@ -50,6 +58,8 @@ export const adminApi = {
   listShipments: () => getJson('/api/shipping'),
   generateShippingLabel: (orderId: number) => postJson(`/api/shipping/orders/${orderId}/label`, {}),
   getOrderTracking: (orderId: number) => getJson(`/api/shipping/orders/${orderId}/tracking`),
+  updateOrderTrackingStatus: (orderId: number, payload: { status: string; location?: string; description?: string }) =>
+    putJson(`/api/shipping/orders/${orderId}/status`, payload),
 
   listReportSchedules: () => getJson('/api/reports/schedules'),
   createReportSchedule: (payload: unknown) => postJson('/api/reports/schedules', payload),

@@ -36,6 +36,7 @@ type CustomerOrder = {
   shipping_status?: string | null;
   shipping_tracking_code?: string | null;
   store_name?: string | null;
+  store_address?: string | null;
   item_count?: number;
 };
 
@@ -551,6 +552,8 @@ const AccountPage = () => {
                           <span>{order.item_count || 0} item(s)</span>
                           <span>|</span>
                           <span>Store: {order.store_name || "-"}</span>
+                          <span>|</span>
+                          <span>Store Address: {order.store_address || "-"}</span>
                           <span>|</span>
                           <span>Shipping:</span>
                           <StatusBadge

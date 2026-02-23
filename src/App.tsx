@@ -43,6 +43,7 @@ import Integrations from "./pages/admin/Integrations";
 import Languages from "./pages/admin/Languages";
 import Settings from "./pages/admin/Settings";
 import Security from "./pages/admin/Security";
+import LowStockProducts from "./pages/admin/LowStockProducts";
 
 const queryClient = new QueryClient();
 
@@ -97,6 +98,7 @@ const App = () => (
                     <Route path="languages" element={<Languages />} />
                     <Route path="settings" element={<Settings />} />
                     <Route path="security" element={<Security />} />
+                    <Route path="low-stock" element={<LowStockProducts />} />
                   </Route>
                   <Route path="/store" element={<Index />} />
                   <Route path="/products" element={<Products />} />

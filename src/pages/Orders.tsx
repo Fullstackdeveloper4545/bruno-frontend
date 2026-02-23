@@ -18,6 +18,7 @@ type MyOrderRow = {
   shipping_status?: string;
   shipping_tracking_code?: string | null;
   store_name?: string | null;
+  store_address?: string | null;
   item_count?: number;
 };
 
@@ -170,6 +171,9 @@ const OrdersPage = () => {
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>Store: {order.store_name || "-"}</span>
+                    <span>|</span>
+                    <span>Store Address: {order.store_address || "-"}</span>
+                    <span>|</span>
                     <span>Shipping:</span>
                     <StatusBadge
                       status={order.shipping_status || "not_created"}

@@ -17,8 +17,6 @@ type Store = {
   regions: string[];
 };
 
-type RoutingMode = "region" | "quantity";
-
 type StoreForm = {
   name: string;
   region_district: string;
@@ -60,13 +58,10 @@ const Stores = () => {
   const [rows, setRows] = useState<Store[]>([]);
   const [form, setForm] = useState<StoreForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | number | null>(null);
-  const [routingMode, setRoutingMode] = useState<RoutingMode>("region");
-  const [savedRoutingMode, setSavedRoutingMode] = useState<RoutingMode>("region");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingStore, setSavingStore] = useState(false);
-  const [savingRouting, setSavingRouting] = useState(false);
   const [activeStoreActionId, setActiveStoreActionId] = useState<string | number | null>(null);
 
   const activeStoreCount = useMemo(
@@ -74,23 +69,15 @@ const Stores = () => {
     [rows],
   );
   const canDeleteStores = rows.length > 1;
-  const routingDirty = routingMode !== savedRoutingMode;
 
   const load = async () => {
     try {
       setLoading(true);
       setError("");
-      const [storesResult, routingResult] = await Promise.all([
-        adminApi.listStores() as Promise<Store[]>,
-        adminApi.getRoutingMode() as Promise<{ mode?: string }>,
-      ]);
+      const storesResult = await adminApi.listStores() as Promise<Store[]>;
 
       const safeRows = Array.isArray(storesResult) ? storesResult : [];
       setRows(safeRows);
-
-      const mode = routingResult?.mode === "quantity" ? "quantity" : "region";
-      setRoutingMode(mode);
-      setSavedRoutingMode(mode);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stores");
       setRows([]);
@@ -206,56 +193,14 @@ const Stores = () => {
     }
   };
 
-  const handleSaveRouting = async () => {
-    if (!routingDirty) return;
-    try {
-      setSavingRouting(true);
-      setError("");
-      setSuccess("");
-      await adminApi.setRoutingMode(routingMode);
-      setSavedRoutingMode(routingMode);
-      setSuccess("Routing strategy saved.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save routing strategy");
-      setSuccess("");
-    } finally {
-      setSavingRouting(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Store Management"
-        description="Manage one or many stores with routing strategy, priority, and region mapping."
+        description="Manage stores, priority, addresses, and mapped regions."
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {success ? <p className="text-sm text-success">{success}</p> : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Routing Strategy</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-[minmax(0,280px),auto] md:items-end">
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Region: assign by mapped regions first. Quantity: assign by available stock for requested variants.
-            </p>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={routingMode}
-              onChange={(e) => setRoutingMode((e.target.value === "quantity" ? "quantity" : "region") as RoutingMode)}
-              disabled={savingRouting || loading}
-            >
-              <option value="region">Region-based routing</option>
-              <option value="quantity">Quantity-based routing</option>
-            </select>
-          </div>
-          <Button disabled={savingRouting || loading || !routingDirty} onClick={() => void handleSaveRouting()}>
-            {savingRouting ? "Saving..." : "Save Routing"}
-          </Button>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

@@ -22,6 +22,9 @@ type Shipment = {
 const Shipping = () => {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [orderId, setOrderId] = useState('');
+  const [status, setStatus] = useState('in_transit');
+  const [location, setLocation] = useState('');
+  const [description, setDescription] = useState('');
   const [message, setMessage] = useState('');
 
   const load = async () => {
@@ -51,8 +54,23 @@ const Shipping = () => {
         <CardHeader>
           <CardTitle>Generate CTT Label</CardTitle>
         </CardHeader>
-        <CardContent className='flex flex-col gap-3 sm:flex-row'>
+        <CardContent className='grid gap-3 md:grid-cols-2'>
           <Input placeholder='Order ID' value={orderId} onChange={(e) => setOrderId(e.target.value)} />
+          <select
+            className='rounded-md border bg-background px-3 py-2 text-sm'
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value='label_created'>Label Created</option>
+            <option value='shipped'>Shipped</option>
+            <option value='in_transit'>In Transit</option>
+            <option value='out_for_delivery'>Out for Delivery</option>
+            <option value='delivered'>Delivered</option>
+            <option value='cancelled'>Cancelled</option>
+          </select>
+          <Input placeholder='Location (optional)' value={location} onChange={(e) => setLocation(e.target.value)} />
+          <Input placeholder='Description (optional)' value={description} onChange={(e) => setDescription(e.target.value)} />
+          <div className='flex flex-wrap gap-2 md:col-span-2'>
           <Button
             onClick={() =>
               void adminApi
@@ -76,6 +94,25 @@ const Shipping = () => {
             <PackageSearch className='mr-2 h-4 w-4' />
             Track Order
           </Button>
+          <Button
+            variant='secondary'
+            onClick={() =>
+              void adminApi
+                .updateOrderTrackingStatus(Number(orderId), {
+                  status,
+                  location: location.trim() || undefined,
+                  description: description.trim() || undefined,
+                })
+                .then((result) =>
+                  setMessage(`Tracking updated: ${(result as { status?: string }).status || status}`),
+                )
+                .then(() => load())
+                .catch((e) => setMessage(e instanceof Error ? e.message : 'Failed to update tracking'))
+            }
+          >
+            Update Tracking Status
+          </Button>
+          </div>
         </CardContent>
       </Card>
 

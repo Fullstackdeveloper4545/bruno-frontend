@@ -1,5 +1,7 @@
-﻿import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+﻿import { useEffect, useMemo, useState } from "react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowUpRight, AlertTriangle, Package } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "@/components/admin/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -9,31 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-
-const revenue7 = [
-  { day: "Mon", revenue: 12600 },
-  { day: "Tue", revenue: 14850 },
-  { day: "Wed", revenue: 13980 },
-  { day: "Thu", revenue: 16840 },
-  { day: "Fri", revenue: 19210 },
-  { day: "Sat", revenue: 22450 },
-  { day: "Sun", revenue: 17890 },
-];
-
-const orders7 = [
-  { day: "Mon", orders: 128 },
-  { day: "Tue", orders: 142 },
-  { day: "Wed", orders: 131 },
-  { day: "Thu", orders: 156 },
-  { day: "Fri", orders: 182 },
-  { day: "Sat", orders: 196 },
-  { day: "Sun", orders: 160 },
-];
-
-const revenue30 = Array.from({ length: 30 }, (_, index) => ({
-  day: `D${index + 1}`,
-  revenue: 11200 + (index % 7) * 1200 + (index % 3) * 850,
-}));
+import { adminApi } from "@/lib/adminApi";
 
 const stats = [
   {
@@ -60,19 +38,6 @@ const stats = [
     change: "-1.4%",
     trend: "down" as const,
   },
-];
-
-const storeOrders = [
-  { name: "Lisbon Central", orders: 520, share: 54 },
-  { name: "Porto Riverside", orders: 280, share: 29 },
-  { name: "Madrid Norte", orders: 160, share: 17 },
-];
-
-const lowStock = [
-  { name: "Azulejo Ceramic Vase", sku: "PT-AZ-118", stock: 6 },
-  { name: "Serra Linen Throw", sku: "PT-SE-342", stock: 9 },
-  { name: "Algarve Olive Oil", sku: "PT-AL-221", stock: 4 },
-  { name: "Basalto Serving Tray", sku: "PT-BA-904", stock: 7 },
 ];
 
 const alerts = [
@@ -108,6 +73,87 @@ const ordersConfig = {
 };
 
 const Dashboard = () => {
+  const [dashboardError, setDashboardError] = useState("");
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [ordersPerStore, setOrdersPerStore] = useState<Array<{ store_name: string; orders: number }>>([]);
+  const [revenue7, setRevenue7] = useState<Array<{ day: string; revenue: number }>>([]);
+  const [revenue30, setRevenue30] = useState<Array<{ day: string; revenue: number }>>([]);
+  const [orders7, setOrders7] = useState<Array<{ day: string; orders: number }>>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<
+    Array<{ name: string; sku: string; store_name: string; stock_left: number }>
+  >([]);
+  const navigate = useNavigate();
+
+  const loadDashboardSummary = async () => {
+    try {
+      setDashboardLoading(true);
+      setDashboardError("");
+      const summary = await adminApi.getDashboardSummary({ threshold: 5, limit: 8 }) as {
+        orders_per_store?: Array<{ store_name?: string; orders?: number }>;
+        revenue_7d?: Array<{ day?: string; revenue?: number }>;
+        revenue_30d?: Array<{ day?: string; revenue?: number }>;
+        orders_7d?: Array<{ day?: string; orders?: number }>;
+        low_stock_products?: Array<{ name?: string; sku?: string; store_name?: string; stock_left?: number }>;
+      };
+
+      setOrdersPerStore(
+        (summary.orders_per_store || []).map((item) => ({
+          store_name: item.store_name || "Unassigned",
+          orders: Number(item.orders || 0),
+        })),
+      );
+      setLowStockProducts(
+        (summary.low_stock_products || []).map((item) => ({
+          name: item.name || "Unnamed Product",
+          sku: item.sku || "-",
+          store_name: item.store_name || "Unknown Store",
+          stock_left: Number(item.stock_left || 0),
+        })),
+      );
+      setOrders7(
+        (summary.orders_7d || []).map((item) => ({
+          day: item.day || "-",
+          orders: Number(item.orders || 0),
+        })),
+      );
+      setRevenue7(
+        (summary.revenue_7d || []).map((item) => ({
+          day: item.day || "-",
+          revenue: Number(item.revenue || 0),
+        })),
+      );
+      setRevenue30(
+        (summary.revenue_30d || []).map((item) => ({
+          day: item.day || "-",
+          revenue: Number(item.revenue || 0),
+        })),
+      );
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : "Failed to load dashboard summary");
+      setOrdersPerStore([]);
+      setLowStockProducts([]);
+      setOrders7([]);
+      setRevenue7([]);
+      setRevenue30([]);
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDashboardSummary();
+  }, []);
+
+  const storeOrders = useMemo(() => {
+    const total = ordersPerStore.reduce((sum, store) => sum + store.orders, 0);
+    return ordersPerStore.map((store) => ({
+      name: store.store_name,
+      orders: store.orders,
+      share: total > 0 ? Math.round((store.orders / total) * 100) : 0,
+    }));
+  }, [ordersPerStore]);
+  const visibleLowStockProducts = lowStockProducts.slice(0, 4);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -120,6 +166,13 @@ const Dashboard = () => {
           </>
         }
       />
+      {dashboardError ? (
+        <Alert className="bg-background/70">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Dashboard Data Error</AlertTitle>
+          <AlertDescription>{dashboardError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card className="border-border/60 bg-card/90">
@@ -190,7 +243,22 @@ const Dashboard = () => {
             <CardContent>
               <TabsContent value="7d">
                 <ChartContainer config={revenueConfig} className="h-[240px] w-full">
-                  <AreaChart data={revenue7} margin={{ left: 0, right: 0 }}>
+                  <AreaChart
+                    data={
+                      revenue7.length > 0
+                        ? revenue7
+                        : [
+                            { day: "Mon", revenue: 0 },
+                            { day: "Tue", revenue: 0 },
+                            { day: "Wed", revenue: 0 },
+                            { day: "Thu", revenue: 0 },
+                            { day: "Fri", revenue: 0 },
+                            { day: "Sat", revenue: 0 },
+                            { day: "Sun", revenue: 0 },
+                          ]
+                    }
+                    margin={{ left: 0, right: 0 }}
+                  >
                     <defs>
                       <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--color-revenue)" stopOpacity={0.4} />
@@ -213,7 +281,7 @@ const Dashboard = () => {
               </TabsContent>
               <TabsContent value="30d">
                 <ChartContainer config={revenueConfig} className="h-[240px] w-full">
-                  <AreaChart data={revenue30} margin={{ left: 0, right: 0 }}>
+                  <AreaChart data={revenue30.length > 0 ? revenue30 : [{ day: "D1", revenue: 0 }]} margin={{ left: 0, right: 0 }}>
                     <defs>
                       <linearGradient id="revFill30" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--color-revenue)" stopOpacity={0.35} />
@@ -221,7 +289,7 @@ const Dashboard = () => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" interval={4} />
+                    <XAxis dataKey="day" interval={Math.max(Math.floor(revenue30.length / 8), 1)} />
                     <YAxis hide />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Area
@@ -245,7 +313,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <ChartContainer config={ordersConfig} className="h-[240px] w-full">
-              <BarChart data={orders7} margin={{ left: 0, right: 0 }}>
+              <BarChart data={orders7.length > 0 ? orders7 : [{ day: "Mon", orders: 0 }, { day: "Tue", orders: 0 }, { day: "Wed", orders: 0 }, { day: "Thu", orders: 0 }, { day: "Fri", orders: 0 }, { day: "Sat", orders: 0 }, { day: "Sun", orders: 0 }]} margin={{ left: 0, right: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis hide />
@@ -261,10 +329,14 @@ const Dashboard = () => {
         <Card className="border-border/60 bg-card/90">
           <CardHeader>
             <CardTitle className="font-display text-xl">Orders Per Store</CardTitle>
-            <CardDescription>Live distribution across the three stores</CardDescription>
+            <CardDescription>Live distribution based on assigned order routing</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {storeOrders.map((store) => (
+            {dashboardLoading ? (
+              <p className="text-sm text-muted-foreground">Loading live store distribution...</p>
+            ) : storeOrders.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No routed orders available yet.</p>
+            ) : storeOrders.map((store) => (
               <div key={store.name} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">{store.name}</span>
@@ -282,20 +354,34 @@ const Dashboard = () => {
             <CardDescription>Prioritize replenishment</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {lowStock.map((item) => (
+            {dashboardLoading ? (
+              <p className="text-sm text-muted-foreground">Loading low stock products...</p>
+            ) : lowStockProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No products are below the stock threshold.</p>
+            ) : visibleLowStockProducts.map((item) => (
               <div
-                key={item.sku}
+                key={`${item.sku}-${item.store_name}-${item.name}`}
                 className="flex items-center justify-between rounded-lg border border-border/60 bg-background/60 p-3"
               >
                 <div>
                   <p className="text-sm font-medium">{item.name}</p>
                   <p className="text-xs text-muted-foreground">SKU {item.sku}</p>
+                  <p className="text-xs text-muted-foreground">Store: {item.store_name}</p>
                 </div>
                 <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                  {item.stock} left
+                  {item.stock_left} left
                 </Badge>
               </div>
             ))}
+            {!dashboardLoading && lowStockProducts.length > 4 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/admin/low-stock")}
+              >
+                View All
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
       </div>

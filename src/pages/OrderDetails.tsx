@@ -85,6 +85,7 @@ type OrderDetails = {
   shipping_tracking_code?: string | null;
   shipping_label_url?: string | null;
   store_name?: string | null;
+  store_address?: string | null;
   items: OrderItem[];
   payments: OrderPayment[];
   shipment?: Shipment | null;
@@ -311,6 +312,7 @@ const OrderDetailsPage = () => {
                 <p className="text-sm text-muted-foreground">{order.shipping_address}</p>
                 <p className="text-xs text-muted-foreground mt-1">Region: {order.shipping_region || "-"}</p>
                 <p className="text-xs text-muted-foreground mt-1">Store: {order.store_name || "-"}</p>
+                <p className="text-xs text-muted-foreground mt-1">Store Address: {order.store_address || "-"}</p>
                 <div className="mt-3 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Shipping Status:</span>

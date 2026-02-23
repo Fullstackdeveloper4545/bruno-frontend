@@ -128,7 +128,7 @@ const AdminLayout = () => {
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon" variant="inset">
         <SidebarHeader>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-sidebar-border/60 bg-background/70 p-2">
+          <div className="flex flex-col gap-3 rounded-lg border border-sidebar-border/60 bg-background/70 p-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow">
                 <Sparkles className="h-5 w-5" />
@@ -138,12 +138,11 @@ const AdminLayout = () => {
                 <p className="font-display text-sm font-semibold">Portugal x Espanha</p>
               </div>
             </div>
-            <Badge variant="secondary" className="hidden gap-1 px-2 text-[10px] uppercase tracking-[0.2em] md:inline-flex">
+            <Badge variant="secondary" className="inline-flex w-fit gap-1 px-2 text-[10px] uppercase tracking-[0.2em]">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Live
             </Badge>
           </div>
-          <SidebarInput placeholder="Search modules" />
         </SidebarHeader>
         <SidebarContent>
           {navSections.map((section, sectionIndex) => (

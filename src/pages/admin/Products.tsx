@@ -24,6 +24,14 @@ type Product = {
 };
 type Store = { id: string; name: string };
 type Category = { id: string; name_pt?: string | null; name_es?: string | null; image_url?: string | null };
+type InventoryRow = {
+  store_id: string;
+  store_name?: string | null;
+  variant_id?: string | null;
+  sku?: string | null;
+  stock_quantity?: number | string | null;
+  updated_at?: string | null;
+};
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
@@ -86,6 +94,12 @@ const Products = () => {
   const [productImageTags, setProductImageTags] = useState<string[]>([]);
 
   const [inventoryForm, setInventoryForm] = useState({ variantId: '', storeId: '', stock: '0' });
+  const [inventoryProductId, setInventoryProductId] = useState('');
+  const [inventoryCategoryId, setInventoryCategoryId] = useState('');
+  const [inventoryProductSearch, setInventoryProductSearch] = useState('');
+  const [inventoryRows, setInventoryRows] = useState<InventoryRow[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const selectedCategory = categories.find((category) => category.id === form.category_id);
   const discountPercentPreview = Number(form.discount_percent);
   const basePricePreview = Number(form.price);
@@ -98,6 +112,26 @@ const Products = () => {
   const discountedPricePreview = canPreviewDiscount
     ? roundMoney(basePricePreview * (1 - discountPercentPreview / 100))
     : null;
+  const filteredInventoryProducts = products.filter((product) => {
+    const matchesCategory = !inventoryCategoryId || product.category_id === inventoryCategoryId;
+    if (!matchesCategory) return false;
+
+    const query = inventoryProductSearch.trim().toLowerCase();
+    if (!query) return true;
+
+    const namePt = String(product.name_pt || '').toLowerCase();
+    const nameEs = String(product.name_es || '').toLowerCase();
+    const categoryPt = String(product.category_name_pt || '').toLowerCase();
+    const categoryEs = String(product.category_name_es || '').toLowerCase();
+    const variants = (product.variants || []).map((variant) => String(variant.sku || '').toLowerCase()).join(' ');
+    return (
+      namePt.includes(query) ||
+      nameEs.includes(query) ||
+      categoryPt.includes(query) ||
+      categoryEs.includes(query) ||
+      variants.includes(query)
+    );
+  });
   const getProductThumbnail = (product: Product) => {
     const firstImage = Array.isArray(product.images)
       ? product.images.find((image) => image?.image_url)?.image_url || ''
@@ -143,6 +177,23 @@ const Products = () => {
     }),
   );
 
+  const loadInventory = async (productId: string) => {
+    if (!productId) {
+      setInventoryRows([]);
+      return;
+    }
+    try {
+      setLoadingInventory(true);
+      const result = await adminApi.getInventory(productId) as InventoryRow[];
+      setInventoryRows(Array.isArray(result) ? result : []);
+    } catch (e) {
+      setInventoryRows([]);
+      setError(e instanceof Error ? e.message : 'Failed to load inventory');
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
   const load = async () => {
     try {
       setError('');
@@ -183,8 +234,35 @@ const Products = () => {
   };
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (!inventoryProductId) return;
+    void loadInventory(inventoryProductId);
+  }, [inventoryProductId]);
 
-  const createProduct = async () => {
+  const resetProductForm = () => {
+    setEditingProductId(null);
+    setForm({
+      name_pt: '',
+      name_es: '',
+      description_pt: '',
+      description_es: '',
+      sku: '',
+      price: '0',
+      compare_at_price: '',
+      discount_percent: '',
+      currency: 'EUR',
+      variant_is_active: true,
+      is_promoted: false,
+      category_id: '',
+    });
+    setVariantAttributes([createAttributeRow()]);
+    setSpecifications([createSpecificationRow()]);
+    setProductImages([]);
+    setProductImagePreviews([]);
+    setProductImageTags([]);
+  };
+
+  const saveProduct = async () => {
     try {
       setError('');
       const basePrice = Number(form.price);
@@ -269,46 +347,73 @@ const Products = () => {
           position: index,
         }));
       }
-      await adminApi.createProduct({
-        category_id: form.category_id || null,
-        name_pt: form.name_pt,
-        name_es: form.name_es,
-        description_pt: form.description_pt,
-        description_es: form.description_es,
-        specifications: specificationsPayload,
-        is_promoted: form.is_promoted,
-        images: imagePayload,
-        variants: variantsPayload,
-      });
-      setForm({
-        name_pt: '',
-        name_es: '',
-        description_pt: '',
-        description_es: '',
-        sku: '',
-        price: '0',
-        compare_at_price: '',
-        discount_percent: '',
-        currency: 'EUR',
-        variant_is_active: true,
-        is_promoted: false,
-        category_id: '',
-      });
-      setVariantAttributes([createAttributeRow()]);
-      setSpecifications([createSpecificationRow()]);
-      setProductImages([]);
-      setProductImagePreviews([]);
-      setProductImageTags([]);
+      if (editingProductId) {
+        await adminApi.updateProduct(editingProductId, {
+          category_id: form.category_id || null,
+          sku: form.sku || null,
+          base_price: effectivePrice,
+          name_pt: form.name_pt || null,
+          name_es: form.name_es || null,
+          description_pt: form.description_pt || null,
+          description_es: form.description_es || null,
+          specifications: specificationsPayload,
+          is_promoted: form.is_promoted,
+        });
+      } else {
+        await adminApi.createProduct({
+          category_id: form.category_id || null,
+          name_pt: form.name_pt,
+          name_es: form.name_es,
+          description_pt: form.description_pt,
+          description_es: form.description_es,
+          specifications: specificationsPayload,
+          is_promoted: form.is_promoted,
+          images: imagePayload,
+          variants: variantsPayload,
+        });
+      }
+      resetProductForm();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create product');
+      setError(e instanceof Error ? e.message : `Failed to ${editingProductId ? 'update' : 'create'} product`);
     }
+  };
+
+  const startEditProduct = (product: Product) => {
+    const firstVariant = (product.variants || [])[0];
+    setEditingProductId(product.id);
+    setForm({
+      name_pt: product.name_pt || '',
+      name_es: product.name_es || '',
+      description_pt: '',
+      description_es: '',
+      sku: firstVariant?.sku || '',
+      price: String(firstVariant?.price ?? '0'),
+      compare_at_price: '',
+      discount_percent: '',
+      currency: 'EUR',
+      variant_is_active: true,
+      is_promoted: Boolean(product.is_promoted),
+      category_id: product.category_id || '',
+    });
+    setVariantAttributes([createAttributeRow()]);
+    setSpecifications([createSpecificationRow()]);
+    setProductImages([]);
+    setProductImagePreviews([]);
+    setProductImageTags([]);
   };
 
   const updateStock = async () => {
     try {
       setError('');
       await adminApi.updateInventory(inventoryForm.variantId, inventoryForm.storeId, Number(inventoryForm.stock));
+      const productIdFromVariant = products.find((product) =>
+        product.variants?.some((variant) => variant.id === inventoryForm.variantId),
+      )?.id;
+      if (productIdFromVariant) {
+        setInventoryProductId(productIdFromVariant);
+        await loadInventory(productIdFromVariant);
+      }
       setInventoryForm({ variantId: '', storeId: '', stock: '0' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update stock');
@@ -354,7 +459,10 @@ const Products = () => {
                   <TableCell>{product.name_es}</TableCell>
                   <TableCell>{product.is_promoted ? 'Yes' : 'No'}</TableCell>
                   <TableCell>{product.variants?.map((v) => `${v.sku} (EUR ${v.price})`).join(', ') || '-'}</TableCell>
-                  <TableCell>
+                  <TableCell className='flex gap-2'>
+                    <Button variant='secondary' size='sm' onClick={() => startEditProduct(product)}>
+                      Edit
+                    </Button>
                     <ConfirmDeleteButton
                       entityName={`product "${product.name_pt || product.name_es || product.id}"`}
                       onConfirm={() => adminApi.deleteProduct(product.id).then(load)}
@@ -368,7 +476,7 @@ const Products = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Create Product + Variant</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{editingProductId ? 'Edit Product' : 'Create Product + Variant'}</CardTitle></CardHeader>
         <CardContent className='grid gap-3 md:grid-cols-2'>
           <select
             className='rounded-md border bg-background px-3 py-2 text-sm md:col-span-2'
@@ -572,7 +680,16 @@ const Products = () => {
               onCheckedChange={(checked) => setForm((p) => ({ ...p, variant_is_active: checked }))}
             />
           </div>
-          <Button onClick={() => void createProduct()}>Save Product</Button>
+          <div className='md:col-span-2 flex gap-2'>
+            <Button onClick={() => void saveProduct()}>
+              {editingProductId ? 'Update Product' : 'Save Product'}
+            </Button>
+            {editingProductId ? (
+              <Button variant='outline' onClick={resetProductForm}>
+                Cancel Edit
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -597,6 +714,90 @@ const Products = () => {
           <Input placeholder='Stock Qty' type='number' value={inventoryForm.stock} onChange={(e) => setInventoryForm((p) => ({ ...p, stock: e.target.value }))} disabled={stockLocked} />
           <Button onClick={() => void updateStock()} disabled={stockLocked}>Update Stock</Button>
           {stockLocked ? <p className='text-xs text-muted-foreground md:col-span-4'>Stock editing is locked while integration is ON.</p> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Inventory by Store</CardTitle></CardHeader>
+        <CardContent className='space-y-3'>
+          <div className='grid gap-3 md:grid-cols-3'>
+            <select
+              className='rounded-md border bg-background px-3 py-2 text-sm'
+              value={inventoryCategoryId}
+              onChange={(e) => {
+                setInventoryCategoryId(e.target.value);
+                setInventoryProductId('');
+              }}
+            >
+              <option value=''>All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name_pt || category.name_es || category.id}
+                </option>
+              ))}
+            </select>
+            <Input
+              placeholder='Search product (name, sku, category)'
+              value={inventoryProductSearch}
+              onChange={(e) => {
+                setInventoryProductSearch(e.target.value);
+                setInventoryProductId('');
+              }}
+            />
+            <select
+              className='rounded-md border bg-background px-3 py-2 text-sm'
+              value={inventoryProductId}
+              onChange={(e) => setInventoryProductId(e.target.value)}
+            >
+              <option value=''>Select Product</option>
+              {filteredInventoryProducts.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {`${product.name_pt || product.name_es || product.id} (${product.category_name_pt || product.category_name_es || 'No Category'})`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className='grid gap-3 md:grid-cols-[1fr_auto]'>
+            <p className='text-xs text-muted-foreground'>
+              Products found: {filteredInventoryProducts.length}
+            </p>
+            <Button
+              variant='secondary'
+              onClick={() => void loadInventory(inventoryProductId)}
+              disabled={!inventoryProductId || loadingInventory}
+            >
+              {loadingInventory ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Store</TableHead>
+                <TableHead>Variant SKU</TableHead>
+                <TableHead>Stock Qty</TableHead>
+                <TableHead>Updated</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!inventoryProductId ? (
+                <TableRow><TableCell colSpan={4}>Select a product to view stock.</TableCell></TableRow>
+              ) : loadingInventory ? (
+                <TableRow><TableCell colSpan={4}>Loading inventory...</TableCell></TableRow>
+              ) : inventoryRows.length === 0 ? (
+                <TableRow><TableCell colSpan={4}>No inventory records for this product.</TableCell></TableRow>
+              ) : (
+                inventoryRows.map((row, index) => (
+                  <TableRow key={`${row.store_id}-${row.variant_id || index}`}>
+                    <TableCell>{row.store_name || row.store_id}</TableCell>
+                    <TableCell>{row.sku || row.variant_id || '-'}</TableCell>
+                    <TableCell>{Number(row.stock_quantity || 0)}</TableCell>
+                    <TableCell>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '-'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

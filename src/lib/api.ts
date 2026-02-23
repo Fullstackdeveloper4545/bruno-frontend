@@ -1,4 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000';
+const localHosts = new Set(['localhost', '127.0.0.1']);
+const runtimeHost =
+  typeof window !== 'undefined' && window.location?.hostname ? window.location.hostname : '';
+const defaultApiBaseUrl = localHosts.has(runtimeHost)
+  ? 'http://localhost:5000'
+  : 'https://bruno-backend-ku0v.onrender.com';
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl;
 const FALLBACK_API_BASE_URL = API_BASE_URL.includes('localhost')
   ? API_BASE_URL.replace('localhost', '127.0.0.1')
   : null;

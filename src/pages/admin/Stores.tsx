@@ -58,6 +58,8 @@ const Stores = () => {
   const [rows, setRows] = useState<Store[]>([]);
   const [form, setForm] = useState<StoreForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [routingMode, setRoutingMode] = useState<"region" | "quantity">("region");
+  const [savingRoutingMode, setSavingRoutingMode] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,10 +76,15 @@ const Stores = () => {
     try {
       setLoading(true);
       setError("");
-      const storesResult = await adminApi.listStores() as Promise<Store[]>;
+      const [storesResult, routingResult] = await Promise.all([
+        adminApi.listStores() as Promise<Store[]>,
+        adminApi.getRoutingMode() as Promise<{ mode?: "region" | "quantity" }>,
+      ]);
 
       const safeRows = Array.isArray(storesResult) ? storesResult : [];
       setRows(safeRows);
+      const mode = routingResult?.mode === "quantity" ? "quantity" : "region";
+      setRoutingMode(mode);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stores");
       setRows([]);
@@ -193,6 +200,21 @@ const Stores = () => {
     }
   };
 
+  const handleSaveRoutingMode = async () => {
+    try {
+      setSavingRoutingMode(true);
+      setError("");
+      setSuccess("");
+      await adminApi.setRoutingMode(routingMode);
+      setSuccess(`Routing mode updated to ${routingMode}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update routing mode");
+      setSuccess("");
+    } finally {
+      setSavingRoutingMode(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -201,6 +223,41 @@ const Stores = () => {
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {success ? <p className="text-sm text-success">{success}</p> : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Order Routing Mode</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Choose how new orders are assigned: by customer region mapping or by highest available stock quantity.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={routingMode === "region" ? "default" : "outline"}
+              onClick={() => setRoutingMode("region")}
+            >
+              Region Priority
+            </Button>
+            <Button
+              type="button"
+              variant={routingMode === "quantity" ? "default" : "outline"}
+              onClick={() => setRoutingMode("quantity")}
+            >
+              Quantity Priority
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={savingRoutingMode}
+              onClick={() => void handleSaveRoutingMode()}
+            >
+              {savingRoutingMode ? "Saving..." : "Save Routing Mode"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

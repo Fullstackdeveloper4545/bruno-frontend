@@ -6,10 +6,28 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 
-type Integration = { base_url: string; api_key: string; webhook_secret: string; is_active: boolean; last_sync_at?: string };
+type Integration = {
+  base_url: string;
+  integration_name?: string;
+  webhook_secret: string;
+  is_active: boolean;
+  last_sync_at?: string;
+};
+const INTEGRATION_STATUS_EVENT = 'admin:integration-settings-updated';
+
+const notifyIntegrationStatusUpdated = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(INTEGRATION_STATUS_EVENT));
+  }
+};
 
 const Integrations = () => {
-  const [settings, setSettings] = useState<Integration>({ base_url: '', api_key: '', webhook_secret: '', is_active: false });
+  const [settings, setSettings] = useState<Integration>({
+    base_url: '',
+    integration_name: '',
+    webhook_secret: '',
+    is_active: false,
+  });
   const [logs, setLogs] = useState<Array<{ id: number; mode: string; status: string; created_at: string }>>([]);
   const [message, setMessage] = useState('');
 
@@ -18,8 +36,9 @@ const Integrations = () => {
       adminApi.getIntegrationSettings() as Promise<Integration>,
       adminApi.getSyncLogs() as Promise<Array<{ id: number; mode: string; status: string; created_at: string }>>,
     ]);
-    setSettings({ ...settings, ...s });
+    setSettings((prev) => ({ ...prev, ...s }));
     setLogs(l);
+    notifyIntegrationStatusUpdated();
   };
 
   useEffect(() => { void load(); }, []);
@@ -33,10 +52,23 @@ const Integrations = () => {
         <CardHeader><CardTitle>Stock Integration</CardTitle></CardHeader>
         <CardContent className='grid gap-3 md:grid-cols-2'>
           <Input placeholder='API Base URL' value={settings.base_url || ''} onChange={(e) => setSettings((p) => ({ ...p, base_url: e.target.value }))} />
-          <Input placeholder='API Key' value={settings.api_key || ''} onChange={(e) => setSettings((p) => ({ ...p, api_key: e.target.value }))} />
+          <Input
+            placeholder='Integration Name (e.g. WordPress)'
+            value={settings.integration_name || ''}
+            onChange={(e) => setSettings((p) => ({ ...p, integration_name: e.target.value }))}
+          />
           <Input placeholder='Webhook Secret' value={settings.webhook_secret || ''} onChange={(e) => setSettings((p) => ({ ...p, webhook_secret: e.target.value }))} />
           <div className='flex items-center gap-2'><span>Integration ON</span><Switch checked={settings.is_active} onCheckedChange={(checked) => setSettings((p) => ({ ...p, is_active: checked }))} /></div>
-          <Button onClick={() => void adminApi.updateIntegrationSettings(settings).then(() => setMessage('Settings saved'))}>Save</Button>
+          <Button
+            onClick={() =>
+              void adminApi
+                .updateIntegrationSettings(settings)
+                .then(() => setMessage('Settings saved'))
+                .then(() => notifyIntegrationStatusUpdated())
+            }
+          >
+            Save
+          </Button>
           <Button variant='outline' onClick={() => void adminApi.manualSync().then(() => load()).then(() => setMessage('Manual sync completed'))}>Manual Sync</Button>
         </CardContent>
       </Card>

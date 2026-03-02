@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { adminApi } from "@/lib/adminApi";
 import { Button } from "@/components/ui/button";
@@ -85,11 +85,16 @@ const tabs: Array<{ mode: OrdersViewMode; to: string }> = [
 ];
 
 export function OrdersView({ mode }: { mode: OrdersViewMode }) {
+  const location = useLocation();
   const [rows, setRows] = useState<Order[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const config = viewConfig[mode];
+  const searchQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("q")?.trim().toLowerCase() || "";
+  }, [location.search]);
 
   const load = async () => {
     try {
@@ -109,7 +114,25 @@ export function OrdersView({ mode }: { mode: OrdersViewMode }) {
     void load();
   }, []);
 
-  const filteredRows = useMemo(() => rows.filter(config.filter), [rows, config]);
+  const filteredRows = useMemo(() => {
+    return rows.filter((order) => {
+      if (!config.filter(order)) return false;
+      if (!searchQuery) return true;
+
+      const searchable = [
+        order.order_number,
+        order.customer_name,
+        order.store_name || "",
+        order.status,
+        toStatusLabel(order.status),
+        String(order.total),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(searchQuery);
+    });
+  }, [rows, config, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -124,7 +147,9 @@ export function OrdersView({ mode }: { mode: OrdersViewMode }) {
         <CardContent className="flex flex-wrap gap-2">
           {tabs.map((tab) => (
             <Button key={tab.mode} asChild variant={mode === tab.mode ? "default" : "outline"} size="sm">
-              <NavLink to={tab.to}>{viewConfig[tab.mode].tabLabel}</NavLink>
+              <NavLink to={location.search ? { pathname: tab.to, search: location.search } : tab.to}>
+                {viewConfig[tab.mode].tabLabel}
+              </NavLink>
             </Button>
           ))}
         </CardContent>
@@ -158,7 +183,7 @@ export function OrdersView({ mode }: { mode: OrdersViewMode }) {
               ) : filteredRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                    No orders in this section.
+                    {searchQuery ? "No orders matched your search." : "No orders in this section."}
                   </TableCell>
                 </TableRow>
               ) : (

@@ -25,7 +25,7 @@ const LowStockProducts = () => {
     try {
       setLoading(true);
       setError("");
-      const summary = await adminApi.getDashboardSummary({ threshold: 5, limit: 200 }) as {
+      const summary = await adminApi.getDashboardSummary({ threshold: 10, limit: 200 }) as {
         low_stock_products?: Array<{ name?: string; sku?: string; store_name?: string; stock_left?: number }>;
       };
       setRows(
@@ -52,7 +52,7 @@ const LowStockProducts = () => {
     <div className="space-y-6">
       <PageHeader
         title="Low Stock Products"
-        description="Products with stock less than 5, grouped by store assignment."
+        description="Products with stock less than 10, grouped by store assignment."
         actions={
           <Button variant="outline" onClick={() => navigate("/admin")}>
             Back to Dashboard
@@ -83,7 +83,7 @@ const LowStockProducts = () => {
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4}>No products below stock threshold.</TableCell>
+                  <TableCell colSpan={4}>No products below 10 units.</TableCell>
                 </TableRow>
               ) : (
                 rows.map((row) => (

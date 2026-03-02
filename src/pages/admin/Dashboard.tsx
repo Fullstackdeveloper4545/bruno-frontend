@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowUpRight, AlertTriangle, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -11,34 +11,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { toast } from "@/components/ui/sonner";
 import { adminApi } from "@/lib/adminApi";
 
-const stats = [
-  {
-    label: "Total Orders",
-    value: "2,482",
-    change: "+4.3%",
-    trend: "up" as const,
-  },
-  {
-    label: "Pending Orders",
-    value: "86",
-    change: "-2.1%",
-    trend: "down" as const,
-  },
-  {
-    label: "Orders Ready to Ship",
-    value: "142",
-    change: "+6.9%",
-    trend: "up" as const,
-  },
-  {
-    label: "Failed Payments",
-    value: "12",
-    change: "-1.4%",
-    trend: "down" as const,
-  },
-];
+type DashboardKpis = {
+  total_revenue: number;
+  today_revenue: number;
+  month_revenue: number;
+  year_revenue: number;
+  total_orders: number;
+  pending_orders: number;
+  ready_to_ship_orders: number;
+  failed_payments: number;
+  revenue_vs_last_month_pct: number;
+  total_orders_vs_prev_7d_pct: number;
+  pending_orders_vs_prev_7d_pct: number;
+  ready_to_ship_vs_prev_7d_pct: number;
+  failed_payments_vs_prev_7d_pct: number;
+};
+
+const fallbackKpis: DashboardKpis = {
+  total_revenue: 1284320,
+  today_revenue: 18240,
+  month_revenue: 412300,
+  year_revenue: 5142000,
+  total_orders: 2482,
+  pending_orders: 86,
+  ready_to_ship_orders: 142,
+  failed_payments: 12,
+  revenue_vs_last_month_pct: 12.4,
+  total_orders_vs_prev_7d_pct: 4.3,
+  pending_orders_vs_prev_7d_pct: -2.1,
+  ready_to_ship_vs_prev_7d_pct: 6.9,
+  failed_payments_vs_prev_7d_pct: -1.4,
+};
+
+const DASHBOARD_REFRESH_INTERVAL_MS = 20000;
+
+const formatCurrency = (value: number) =>
+  `EUR ${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+
+const formatInteger = (value: number) => Number(value || 0).toLocaleString("en-US");
+
+const formatPercent = (value: number) => `${value >= 0 ? "+" : ""}${Number(value || 0).toFixed(1)}%`;
 
 const alerts = [
   {
@@ -75,6 +90,8 @@ const ordersConfig = {
 const Dashboard = () => {
   const [dashboardError, setDashboardError] = useState("");
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
+  const [kpis, setKpis] = useState<DashboardKpis>(fallbackKpis);
   const [ordersPerStore, setOrdersPerStore] = useState<Array<{ store_name: string; orders: number }>>([]);
   const [revenue7, setRevenue7] = useState<Array<{ day: string; revenue: number }>>([]);
   const [revenue30, setRevenue30] = useState<Array<{ day: string; revenue: number }>>([]);
@@ -84,17 +101,38 @@ const Dashboard = () => {
   >([]);
   const navigate = useNavigate();
 
-  const loadDashboardSummary = async () => {
+  const loadDashboardSummary = useCallback(async () => {
     try {
       setDashboardLoading(true);
       setDashboardError("");
-      const summary = await adminApi.getDashboardSummary({ threshold: 5, limit: 8 }) as {
+      const summary = await adminApi.getDashboardSummary({ threshold: 10, limit: 200 }) as {
+        kpis?: Partial<DashboardKpis>;
         orders_per_store?: Array<{ store_name?: string; orders?: number }>;
         revenue_7d?: Array<{ day?: string; revenue?: number }>;
         revenue_30d?: Array<{ day?: string; revenue?: number }>;
         orders_7d?: Array<{ day?: string; orders?: number }>;
         low_stock_products?: Array<{ name?: string; sku?: string; store_name?: string; stock_left?: number }>;
       };
+
+      const incomingKpis = summary.kpis;
+      if (incomingKpis) {
+        const nextKpis: DashboardKpis = {
+          total_revenue: Number(incomingKpis.total_revenue || 0),
+          today_revenue: Number(incomingKpis.today_revenue || 0),
+          month_revenue: Number(incomingKpis.month_revenue || 0),
+          year_revenue: Number(incomingKpis.year_revenue || 0),
+          total_orders: Number(incomingKpis.total_orders || 0),
+          pending_orders: Number(incomingKpis.pending_orders || 0),
+          ready_to_ship_orders: Number(incomingKpis.ready_to_ship_orders || 0),
+          failed_payments: Number(incomingKpis.failed_payments || 0),
+          revenue_vs_last_month_pct: Number(incomingKpis.revenue_vs_last_month_pct || 0),
+          total_orders_vs_prev_7d_pct: Number(incomingKpis.total_orders_vs_prev_7d_pct || 0),
+          pending_orders_vs_prev_7d_pct: Number(incomingKpis.pending_orders_vs_prev_7d_pct || 0),
+          ready_to_ship_vs_prev_7d_pct: Number(incomingKpis.ready_to_ship_vs_prev_7d_pct || 0),
+          failed_payments_vs_prev_7d_pct: Number(incomingKpis.failed_payments_vs_prev_7d_pct || 0),
+        };
+        setKpis(nextKpis);
+      }
 
       setOrdersPerStore(
         (summary.orders_per_store || []).map((item) => ({
@@ -138,11 +176,15 @@ const Dashboard = () => {
     } finally {
       setDashboardLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadDashboardSummary();
-  }, []);
+    const intervalId = window.setInterval(() => {
+      void loadDashboardSummary();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [loadDashboardSummary]);
 
   const storeOrders = useMemo(() => {
     const total = ordersPerStore.reduce((sum, store) => sum + store.orders, 0);
@@ -152,7 +194,79 @@ const Dashboard = () => {
       share: total > 0 ? Math.round((store.orders / total) * 100) : 0,
     }));
   }, [ordersPerStore]);
+  const statsCards = useMemo(
+    () => [
+      {
+        label: "Total Orders",
+        value: formatInteger(kpis.total_orders),
+        change: formatPercent(kpis.total_orders_vs_prev_7d_pct),
+        trend: kpis.total_orders_vs_prev_7d_pct >= 0 ? ("up" as const) : ("down" as const),
+      },
+      {
+        label: "Pending Orders",
+        value: formatInteger(kpis.pending_orders),
+        change: formatPercent(kpis.pending_orders_vs_prev_7d_pct),
+        trend: kpis.pending_orders_vs_prev_7d_pct >= 0 ? ("up" as const) : ("down" as const),
+      },
+      {
+        label: "Orders Ready to Ship",
+        value: formatInteger(kpis.ready_to_ship_orders),
+        change: formatPercent(kpis.ready_to_ship_vs_prev_7d_pct),
+        trend: kpis.ready_to_ship_vs_prev_7d_pct >= 0 ? ("up" as const) : ("down" as const),
+      },
+      {
+        label: "Failed Payments",
+        value: formatInteger(kpis.failed_payments),
+        change: formatPercent(kpis.failed_payments_vs_prev_7d_pct),
+        trend: kpis.failed_payments_vs_prev_7d_pct >= 0 ? ("up" as const) : ("down" as const),
+      },
+    ],
+    [kpis],
+  );
   const visibleLowStockProducts = lowStockProducts.slice(0, 4);
+  const lowStockBelowTenCount = lowStockProducts.length;
+
+  const handleExportSnapshot = () => {
+    try {
+      setIsExportingSnapshot(true);
+      const exportedAt = new Date();
+      const snapshot = {
+        exported_at: exportedAt.toISOString(),
+        source: "admin_dashboard",
+        kpis,
+        kpi_cards: statsCards,
+        alerts,
+        charts: {
+          revenue_7d: revenue7,
+          revenue_30d: revenue30,
+          orders_7d: orders7,
+        },
+        orders_per_store: storeOrders,
+        low_stock_products: lowStockProducts,
+      };
+
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const fileStamp = exportedAt.toISOString().replace(/[:.]/g, "-");
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `dashboard-snapshot-${fileStamp}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+
+      toast.success("Snapshot exported", {
+        description: "Dashboard snapshot has been downloaded successfully.",
+      });
+    } catch (error) {
+      toast.error("Export failed", {
+        description: error instanceof Error ? error.message : "Could not export dashboard snapshot.",
+      });
+    } finally {
+      setIsExportingSnapshot(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -161,8 +275,9 @@ const Dashboard = () => {
         description="Your real-time command center for revenue, orders, and operational health across Portugal and Spain."
         actions={
           <>
-            <Button variant="outline">Export Snapshot</Button>
-            <Button>New Order</Button>
+            <Button variant="outline" onClick={handleExportSnapshot} disabled={isExportingSnapshot}>
+              {isExportingSnapshot ? "Exporting..." : "Export Snapshot"}
+            </Button>
           </>
         }
       />
@@ -179,30 +294,37 @@ const Dashboard = () => {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardDescription>Total Revenue</CardDescription>
-              <CardTitle className="font-display text-3xl">EUR 1,284,320</CardTitle>
+              <CardTitle className="font-display text-3xl">{formatCurrency(kpis.total_revenue)}</CardTitle>
             </div>
-            <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-              +12.4% vs last month
+            <Badge
+              variant="secondary"
+              className={
+                kpis.revenue_vs_last_month_pct >= 0
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-rose-100 text-rose-700"
+              }
+            >
+              {`${formatPercent(kpis.revenue_vs_last_month_pct)} vs last month`}
             </Badge>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-dashed border-border/60 p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Today</p>
-              <p className="text-lg font-semibold">EUR 18,240</p>
+              <p className="text-lg font-semibold">{formatCurrency(kpis.today_revenue)}</p>
             </div>
             <div className="rounded-lg border border-dashed border-border/60 p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Month</p>
-              <p className="text-lg font-semibold">EUR 412,300</p>
+              <p className="text-lg font-semibold">{formatCurrency(kpis.month_revenue)}</p>
             </div>
             <div className="rounded-lg border border-dashed border-border/60 p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Year</p>
-              <p className="text-lg font-semibold">EUR 5,142,000</p>
+              <p className="text-lg font-semibold">{formatCurrency(kpis.year_revenue)}</p>
             </div>
           </CardContent>
         </Card>
 
         <div className="grid gap-4">
-          {stats.map((stat, index) => (
+          {statsCards.map((stat, index) => (
             <Card
               key={stat.label}
               className="border-border/60 bg-card/90 transition-all animate-fade-in"
@@ -357,7 +479,7 @@ const Dashboard = () => {
             {dashboardLoading ? (
               <p className="text-sm text-muted-foreground">Loading low stock products...</p>
             ) : lowStockProducts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No products are below the stock threshold.</p>
+              <p className="text-sm text-muted-foreground">No products are below 10 units.</p>
             ) : visibleLowStockProducts.map((item) => (
               <div
                 key={`${item.sku}-${item.store_name}-${item.name}`}
@@ -412,25 +534,37 @@ const Dashboard = () => {
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/70 p-4">
               <div>
                 <p className="text-sm font-medium">Pending Orders Review</p>
-                <p className="text-xs text-muted-foreground">86 orders waiting for payment</p>
+                <p className="text-xs text-muted-foreground">{kpis.pending_orders} orders waiting for payment</p>
               </div>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-[136px] justify-center"
+                onClick={() => navigate("/admin/orders/packaging")}
+              >
                 Review
               </Button>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/70 p-4">
               <div>
                 <p className="text-sm font-medium">Ready to Ship</p>
-                <p className="text-xs text-muted-foreground">142 orders ready for pickup</p>
+                <p className="text-xs text-muted-foreground">{kpis.ready_to_ship_orders} orders ready for pickup</p>
               </div>
-              <Button size="sm">Print Labels</Button>
+              <Button size="sm" variant="outline" className="w-[136px] justify-center" onClick={() => navigate("/admin/shipping")}>
+                Print Labels
+              </Button>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/70 p-4">
               <div>
                 <p className="text-sm font-medium">Failed Payments</p>
-                <p className="text-xs text-muted-foreground">12 customers need follow-up</p>
+                <p className="text-xs text-muted-foreground">{kpis.failed_payments} customers need follow-up</p>
               </div>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-[136px] justify-center"
+                onClick={() => navigate("/admin/payments")}
+              >
                 Send Reminder
               </Button>
             </div>
@@ -441,10 +575,15 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm font-medium">Low Stock Alert</p>
-                  <p className="text-xs text-muted-foreground">4 products below 10 units</p>
+                  <p className="text-xs text-muted-foreground">{lowStockBelowTenCount} products below 10 units</p>
                 </div>
               </div>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-[136px] justify-center"
+                onClick={() => navigate("/admin/low-stock")}
+              >
                 Reorder
               </Button>
             </div>
